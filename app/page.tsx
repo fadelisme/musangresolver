@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 type Tab = 'brand24' | 'tiktok'
+type ViewMode = 'table' | 'snippet'
 
 interface TabState {
   urls: string
@@ -13,6 +14,8 @@ interface TabState {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('brand24')
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [copied, setCopied] = useState(false)
 
   const [brand24, setBrand24] = useState<TabState>({
     urls: '',
@@ -104,6 +107,14 @@ export default function Home() {
     })
   }
 
+  const copyAllToClipboard = () => {
+    const text = currentTab.results.map((r) => r.resolved).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
@@ -192,47 +203,96 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Results Table */}
-              <div className="overflow-x-auto mb-6">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">Original URL</th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700">
-                        {activeTab === 'brand24' ? 'Resolved URL' : 'Desktop URL'}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentTab.results.slice(0, 10).map((result, idx) => (
-                      <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-gray-600 break-all text-xs">
-                          {result.original.substring(0, 50)}...
-                        </td>
-                        <td className="py-3 px-4 text-indigo-600 break-all text-xs">
-                          <a href={result.resolved} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                            {result.resolved.substring(0, 50)}...
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* View Mode Toggle */}
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
+                    viewMode === 'table'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Table View
+                </button>
+                <button
+                  onClick={() => setViewMode('snippet')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
+                    viewMode === 'snippet'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  Text Snippet
+                </button>
               </div>
 
-              {currentTab.results.length > 10 && (
+              {/* Results Table View */}
+              {viewMode === 'table' && (
+                <div className="overflow-x-auto mb-6">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b-2 border-gray-300">
+                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Original URL</th>
+                        <th className="text-left py-3 px-4 font-semibold text-gray-700">
+                          {activeTab === 'brand24' ? 'Resolved URL' : 'Desktop URL'}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentTab.results.slice(0, 10).map((result, idx) => (
+                        <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="py-3 px-4 text-gray-600 break-all text-xs">
+                            {result.original.substring(0, 50)}...
+                          </td>
+                          <td className="py-3 px-4 text-indigo-600 break-all text-xs">
+                            <a href={result.resolved} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                              {result.resolved.substring(0, 50)}...
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Text Snippet View */}
+              {viewMode === 'snippet' && (
+                <div className="mb-6">
+                  <div className="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                    <pre>{currentTab.results.map((r) => r.resolved).join('\n')}</pre>
+                  </div>
+                </div>
+              )}
+
+              {currentTab.results.length > 10 && viewMode === 'table' && (
                 <p className="text-gray-600 text-sm mb-4">
                   ... and {currentTab.results.length - 10} more URLs
                 </p>
               )}
 
-              {/* Download Button */}
-              <button
-                onClick={downloadCSV}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-              >
-                ⬇ Download CSV
-              </button>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                {viewMode === 'snippet' && (
+                  <button
+                    onClick={copyAllToClipboard}
+                    className={`flex-1 font-semibold py-3 px-6 rounded-lg transition-colors duration-200 text-white ${
+                      copied
+                        ? 'bg-green-600'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                  >
+                    {copied ? '✓ Copied to Clipboard!' : '📋 Copy All'}
+                  </button>
+                )}
+                <button
+                  onClick={downloadCSV}
+                  className={`${viewMode === 'snippet' ? 'flex-1' : 'w-full'} bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200`}
+                >
+                  ⬇ Download CSV
+                </button>
+              </div>
             </>
           )}
         </div>
