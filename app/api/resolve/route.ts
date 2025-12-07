@@ -51,7 +51,12 @@ async function resolveRedirect(url: string): Promise<string> {
     })
 
     clearTimeout(timeout)
-    return response.url
+
+    // Strip query parameters from the resolved URL
+    const resolvedUrl = new URL(response.url)
+    resolvedUrl.search = ''
+
+    return resolvedUrl.toString()
   } catch (error) {
     clearTimeout(timeout)
     throw new Error(`Failed to resolve: ${url}`)
