@@ -52,9 +52,17 @@ async function resolveRedirect(url: string): Promise<string> {
 
     clearTimeout(timeout)
 
-    // Strip query parameters from the resolved URL
+    // Preserve important query parameters (e.g., YouTube video ID)
     const resolvedUrl = new URL(response.url)
-    resolvedUrl.search = ''
+    const hostname = resolvedUrl.hostname
+
+    // Keep query parameters for these domains
+    const preserveQueryDomains = ['youtube.com', 'www.youtube.com', 'youtu.be', 'www.youtu.be', 'tiktok.com', 'www.tiktok.com', 'vt.tiktok.com']
+    const shouldPreserve = preserveQueryDomains.some(domain => hostname.includes(domain))
+
+    if (!shouldPreserve) {
+      resolvedUrl.search = ''
+    }
 
     return resolvedUrl.toString()
   } catch (error) {
