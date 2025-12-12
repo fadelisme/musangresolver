@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-type Tab = 'brand24' | 'tiktok'
+type Tab = 'brand24' | 'tiktok' | 'utc2wib'
 type ViewMode = 'table' | 'snippet'
 
 interface TabState {
@@ -31,8 +31,36 @@ export default function Home() {
     error: '',
   })
 
-  const currentTab = activeTab === 'brand24' ? brand24 : tiktok
-  const setCurrentTab = activeTab === 'brand24' ? setBrand24 : setTiktok
+  const [utc2wib, setUtc2wib] = useState<TabState>({
+    urls: '',
+    loading: false,
+    results: [],
+    error: '',
+  })
+
+  const currentTab = activeTab === 'brand24' ? brand24 : activeTab === 'tiktok' ? tiktok : utc2wib
+  const setCurrentTab = activeTab === 'brand24' ? setBrand24 : activeTab === 'tiktok' ? setTiktok : setUtc2wib
+
+  const convertUTCtoWIB = (utcDateString: string): string | null => {
+    try {
+      const date = new Date(utcDateString.trim())
+      if (isNaN(date.getTime())) return null
+
+      // Convert to WIB (UTC+7)
+      const wibDate = new Date(date.getTime() + 7 * 60 * 60 * 1000)
+
+      // Format: DD/MM/YYYY (column 1) and HH:MM (column 2)
+      const day = String(wibDate.getUTCDate()).padStart(2, '0')
+      const month = String(wibDate.getUTCMonth() + 1).padStart(2, '0')
+      const year = wibDate.getUTCFullYear()
+      const hours = String(wibDate.getUTCHours()).padStart(2, '0')
+      const minutes = String(wibDate.getUTCMinutes()).padStart(2, '0')
+
+      return `${day}/${month}/${year}    ${hours}:${minutes}`
+    } catch (err) {
+      return null
+    }
+  }
 
   const handleResolveURLs = async () => {
     if (!currentTab.urls.trim()) {
@@ -43,6 +71,24 @@ export default function Home() {
     setCurrentTab({ ...currentTab, loading: true, error: '', results: [] })
 
     try {
+      // Handle UTC to WIB conversion
+      if (activeTab === 'utc2wib') {
+        const dateList = currentTab.urls
+          .split('\n')
+          .map((date) => date.trim())
+          .filter((date) => date.length > 0)
+
+        const results = dateList
+          .map((original) => ({
+            original,
+            resolved: convertUTCtoWIB(original) || 'Invalid date format'
+          }))
+
+        setCurrentTab({ ...currentTab, results, loading: false })
+        return
+      }
+
+      // Handle URL resolution
       const urlList = currentTab.urls
         .split('\n')
         .map((url) => url.trim())
@@ -63,7 +109,7 @@ export default function Home() {
     } catch (err) {
       setCurrentTab({
         ...currentTab,
-        error: 'Error resolving URLs. Please try again.',
+        error: activeTab === 'utc2wib' ? 'Error converting dates. Please try again.' : 'Error resolving URLs. Please try again.',
         loading: false
       })
       console.error(err)
@@ -73,14 +119,30 @@ export default function Home() {
   const downloadCSV = () => {
     if (currentTab.results.length === 0) return
 
-    const csvContent = [
-      ['original_url', 'parsed_url'],
-      ...currentTab.results.map((r) => [r.original, r.resolved]),
-    ]
-      .map((row) => row.map((cell) => `"${cell}"`).join(','))
-      .join('\n')
+    let csvContent: string
+    let filename: string
 
-    const filename = activeTab === 'brand24' ? 'brand24_resolved_urls.csv' : 'tiktok_resolved_urls.csv'
+    if (activeTab === 'utc2wib') {
+      csvContent = [
+        ['Date', 'Time'],
+        ...currentTab.results.map((r) => {
+          const [date, time] = r.resolved.split('    ')
+          return [date, time]
+        }),
+      ]
+        .map((row) => row.map((cell) => `"${cell}"`).join(','))
+        .join('\n')
+      filename = 'utc_to_wib_conversions.csv'
+    } else {
+      csvContent = [
+        ['original_url', 'parsed_url'],
+        ...currentTab.results.map((r) => [r.original, r.resolved]),
+      ]
+        .map((row) => row.map((cell) => `"${cell}"`).join(','))
+        .join('\n')
+      filename = activeTab === 'brand24' ? 'brand24_resolved_urls.csv' : 'tiktok_resolved_urls.csv'
+    }
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
@@ -107,11 +169,26 @@ export default function Home() {
     })
   }
 
+  const [copiedColumn, setCopiedColumn] = useState<'date' | 'time' | null>(null)
+
   const copyAllToClipboard = () => {
     const text = currentTab.results.map((r) => r.resolved).join('\n')
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const copyColumn = (column: 'date' | 'time') => {
+    let text = ''
+    if (column === 'date') {
+      text = currentTab.results.map((r) => r.resolved.split('    ')[0]).join('\n')
+    } else {
+      text = currentTab.results.map((r) => r.resolved.split('    ')[1]).join('\n')
+    }
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedColumn(column)
+      setTimeout(() => setCopiedColumn(null), 2000)
     })
   }
 
@@ -150,19 +227,31 @@ export default function Home() {
             >
               TikTok
             </button>
+            <button
+              onClick={() => handleTabChange('utc2wib')}
+              className={`py-3 px-6 font-semibold transition-colors ${
+                activeTab === 'utc2wib'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              UTC to WIB
+            </button>
           </div>
 
           {/* Input Section */}
           <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              {activeTab === 'brand24' ? 'Paste Brand24 URLs (one per line)' : 'Paste TikTok URLs (one per line)'}
+              {activeTab === 'brand24' ? 'Paste Brand24 URLs (one per line)' : activeTab === 'tiktok' ? 'Paste TikTok URLs (one per line)' : 'Paste UTC Dates (one per line)'}
             </label>
             <textarea
               value={currentTab.urls}
               onChange={(e) => setCurrentTab({ ...currentTab, urls: e.target.value })}
               placeholder={activeTab === 'brand24'
                 ? 'https://app.brand24.com/result/open/?id=...&#10;https://app.brand24.com/result/open/?id=...'
-                : 'https://vt.tiktok.com/ZSfS9VtuF/&#10;https://vt.tiktok.com/ZSfS9n7KR/'
+                : activeTab === 'tiktok'
+                ? 'https://vt.tiktok.com/ZSfS9VtuF/&#10;https://vt.tiktok.com/ZSfS9n7KR/'
+                : '2025-12-10T11:35:21.000Z&#10;2025-12-10T10:00:27.000Z'
               }
               className="w-full h-64 p-4 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none resize-none font-mono text-sm"
               disabled={currentTab.loading}
@@ -183,7 +272,9 @@ export default function Home() {
               disabled={currentTab.loading}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
             >
-              {currentTab.loading ? 'Resolving...' : 'Resolve URLs'}
+              {currentTab.loading
+                ? activeTab === 'utc2wib' ? 'Converting...' : 'Resolving...'
+                : activeTab === 'utc2wib' ? 'Convert Dates' : 'Resolve URLs'}
             </button>
             <button
               onClick={handleClear}
@@ -199,36 +290,89 @@ export default function Home() {
             <>
               <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-green-700 font-semibold">
-                  ✓ Successfully resolved {currentTab.results.length} URL{currentTab.results.length !== 1 ? 's' : ''}
+                  ✓ Successfully {activeTab === 'utc2wib' ? 'converted' : 'resolved'} {currentTab.results.length} {activeTab === 'utc2wib' ? 'date' : 'URL'}{currentTab.results.length !== 1 ? 's' : ''}
                 </p>
               </div>
 
+              {/* UTC to WIB Output View */}
+              {activeTab === 'utc2wib' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-4">WIB Output</label>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    {/* Date Column */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-gray-700">Date (DD/MM/YYYY)</label>
+                        <button
+                          onClick={() => copyColumn('date')}
+                          className={`text-xs font-semibold py-1 px-3 rounded transition-colors ${
+                            copiedColumn === 'date'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          }`}
+                        >
+                          {copiedColumn === 'date' ? '✓ Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <textarea
+                        value={currentTab.results.map(r => r.resolved.split('    ')[0]).join('\n')}
+                        readOnly
+                        className="w-full h-64 p-4 border-2 border-indigo-300 rounded-lg bg-indigo-50 font-mono text-sm resize-none"
+                      />
+                    </div>
+                    {/* Time Column */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-gray-700">Time (HH:MM)</label>
+                        <button
+                          onClick={() => copyColumn('time')}
+                          className={`text-xs font-semibold py-1 px-3 rounded transition-colors ${
+                            copiedColumn === 'time'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          }`}
+                        >
+                          {copiedColumn === 'time' ? '✓ Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <textarea
+                        value={currentTab.results.map(r => r.resolved.split('    ')[1]).join('\n')}
+                        readOnly
+                        className="w-full h-64 p-4 border-2 border-indigo-300 rounded-lg bg-indigo-50 font-mono text-sm resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* View Mode Toggle */}
-              <div className="flex gap-2 mb-6">
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
-                    viewMode === 'table'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  Table View
-                </button>
-                <button
-                  onClick={() => setViewMode('snippet')}
-                  className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
-                    viewMode === 'snippet'
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  Text Snippet
-                </button>
-              </div>
+              {activeTab !== 'utc2wib' && (
+                <div className="flex gap-2 mb-6">
+                  <button
+                    onClick={() => setViewMode('table')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
+                      viewMode === 'table'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Table View
+                  </button>
+                  <button
+                    onClick={() => setViewMode('snippet')}
+                    className={`flex-1 py-2 px-4 rounded-lg font-semibold transition-colors ${
+                      viewMode === 'snippet'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    Text Snippet
+                  </button>
+                </div>
+              )}
 
               {/* Results Table View */}
-              {viewMode === 'table' && (
+              {viewMode === 'table' && activeTab !== 'utc2wib' && (
                 <div className="overflow-x-auto mb-6">
                   <table className="w-full text-sm">
                     <thead>
@@ -258,7 +402,7 @@ export default function Home() {
               )}
 
               {/* Text Snippet View */}
-              {viewMode === 'snippet' && (
+              {viewMode === 'snippet' && activeTab !== 'utc2wib' && (
                 <div className="mb-6">
                   <div className="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-x-auto">
                     <pre>{currentTab.results.map((r) => r.resolved).join('\n')}</pre>
@@ -274,7 +418,7 @@ export default function Home() {
 
               {/* Action Buttons */}
               <div className="flex gap-3">
-                {viewMode === 'snippet' && (
+                {viewMode === 'snippet' && activeTab !== 'utc2wib' && (
                   <button
                     onClick={copyAllToClipboard}
                     className={`flex-1 font-semibold py-3 px-6 rounded-lg transition-colors duration-200 text-white ${
@@ -288,7 +432,7 @@ export default function Home() {
                 )}
                 <button
                   onClick={downloadCSV}
-                  className={`${viewMode === 'snippet' ? 'flex-1' : 'w-full'} bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200`}
+                  className={`${viewMode === 'snippet' && activeTab !== 'utc2wib' ? 'flex-1' : 'w-full'} bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200`}
                 >
                   ⬇ Download CSV
                 </button>
@@ -302,7 +446,9 @@ export default function Home() {
           <p>
             {activeTab === 'brand24'
               ? 'Paste your Brand24 URLs and click "Resolve URLs" to get started'
-              : 'Paste your TikTok short URLs and click "Resolve URLs" to get the desktop URLs'}
+              : activeTab === 'tiktok'
+              ? 'Paste your TikTok short URLs and click "Resolve URLs" to get the desktop URLs'
+              : 'Paste your UTC dates and click "Convert Dates" to convert to WIB (DD/MM/YYYY | HH:MM)'}
           </p>
         </div>
       </div>
