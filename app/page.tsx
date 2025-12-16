@@ -73,16 +73,19 @@ export default function Home() {
     try {
       // Handle UTC to WIB conversion
       if (activeTab === 'utc2wib') {
-        const dateList = currentTab.urls
-          .split('\n')
-          .map((date) => date.trim())
-          .filter((date) => date.length > 0)
+        const dateList = currentTab.urls.split('\n')
 
-        const results = dateList
-          .map((original) => ({
-            original,
-            resolved: convertUTCtoWIB(original) || 'Invalid date format'
-          }))
+        const results = dateList.map((date) => {
+          const trimmed = date.trim()
+          if (trimmed.length === 0) {
+            // Preserve empty lines
+            return { original: '', resolved: '' }
+          }
+          return {
+            original: trimmed,
+            resolved: convertUTCtoWIB(trimmed) || 'Invalid date format'
+          }
+        })
 
         setCurrentTab({ ...currentTab, results, loading: false })
         return
@@ -182,9 +185,9 @@ export default function Home() {
   const copyColumn = (column: 'date' | 'time') => {
     let text = ''
     if (column === 'date') {
-      text = currentTab.results.map((r) => r.resolved.split('    ')[0]).join('\n')
+      text = currentTab.results.map((r) => r.resolved ? r.resolved.split('    ')[0] : '').join('\n')
     } else {
-      text = currentTab.results.map((r) => r.resolved.split('    ')[1]).join('\n')
+      text = currentTab.results.map((r) => r.resolved ? r.resolved.split('    ')[1] : '').join('\n')
     }
     navigator.clipboard.writeText(text).then(() => {
       setCopiedColumn(column)
@@ -290,7 +293,7 @@ export default function Home() {
             <>
               <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-green-700 font-semibold">
-                  ✓ Successfully {activeTab === 'utc2wib' ? 'converted' : 'resolved'} {currentTab.results.length} {activeTab === 'utc2wib' ? 'date' : 'URL'}{currentTab.results.length !== 1 ? 's' : ''}
+                  ✓ Successfully {activeTab === 'utc2wib' ? 'converted' : 'resolved'} {activeTab === 'utc2wib' ? currentTab.results.filter(r => r.resolved).length : currentTab.results.length} {activeTab === 'utc2wib' ? 'date' : 'URL'}{(activeTab === 'utc2wib' ? currentTab.results.filter(r => r.resolved).length : currentTab.results.length) !== 1 ? 's' : ''}
                 </p>
               </div>
 
@@ -315,7 +318,7 @@ export default function Home() {
                         </button>
                       </div>
                       <textarea
-                        value={currentTab.results.map(r => r.resolved.split('    ')[0]).join('\n')}
+                        value={currentTab.results.map(r => r.resolved ? r.resolved.split('    ')[0] : '').join('\n')}
                         readOnly
                         className="w-full h-64 p-4 border-2 border-indigo-300 rounded-lg bg-indigo-50 font-mono text-sm resize-none"
                       />
@@ -336,7 +339,7 @@ export default function Home() {
                         </button>
                       </div>
                       <textarea
-                        value={currentTab.results.map(r => r.resolved.split('    ')[1]).join('\n')}
+                        value={currentTab.results.map(r => r.resolved ? r.resolved.split('    ')[1] : '').join('\n')}
                         readOnly
                         className="w-full h-64 p-4 border-2 border-indigo-300 rounded-lg bg-indigo-50 font-mono text-sm resize-none"
                       />
